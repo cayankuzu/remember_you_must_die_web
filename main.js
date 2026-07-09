@@ -5,9 +5,9 @@ import gsap from 'gsap';
 
 // Performance settings
 const PERFORMANCE = {
-    shadowMapSize: 1024,
-    pixelRatio: Math.min(window.devicePixelRatio, 1.5),
-    antialias: window.devicePixelRatio <= 1.5,
+    shadowMapSize: 512,
+    pixelRatio: Math.min(window.devicePixelRatio, 1.25),
+    antialias: window.devicePixelRatio <= 1.25,
     powerPreference: "high-performance"
 };
 
@@ -147,14 +147,17 @@ let ouroboros, dna, hourglass, galaxy;
 let galaxyContainer;
 let skullClosed, skullHalf, skullWide;
 let currentSkull = null;
-let loadedCount = 0;
-const totalModels = 7;
+const CRITICAL_MODEL_COUNT = 1;
+let criticalModelsLoaded = 0;
 let currentSection = null;
 let isZoomedIn = false;
 let isGalaxyWindowOpen = false;
+let deferredLoadsScheduled = false;
 
 // Original materials storage
-const originalMaterials = new Map();
+const originalMaterials = new WeakMap();
+const gltfLoader = new GLTFLoader();
+const modelLoadPromises = new Map();
 
 // Animation cleanup
 let currentAnimations = [];
@@ -203,6 +206,7 @@ function init() {
     
     // Setup
     setupLights();
+    updateNavButtonPositions();
     loadModels();
     setupUI();
     setupBrightnessControls();
@@ -248,28 +252,95 @@ function cleanupCurrentAnimations() {
     currentAnimations = [];
 }
 
-function loadModels() {
-    const loader = new GLTFLoader();
+function loadOnce(key, executor) {
+    if (!modelLoadPromises.has(key)) {
+        const task = executor().catch((error) => {
+            modelLoadPromises.delete(key);
+            throw error;
+        });
+        modelLoadPromises.set(key, task);
+    }
     
-    // Load Ouroboros
-    loader.load('models/oroborus.glb', (gltf) => {
+    return modelLoadPromises.get(key);
+}
+
+function loadGLTF(path) {
+    return new Promise((resolve, reject) => {
+        gltfLoader.load(path, resolve, undefined, reject);
+    });
+}
+
+function updateCriticalProgress() {
+    criticalModelsLoaded += 1;
+    const progress = Math.min((criticalModelsLoaded / CRITICAL_MODEL_COUNT) * 100, 100);
+    
+    if (window.updateLoaderProgress) {
+        window.updateLoaderProgress(progress);
+    }
+}
+
+function revealScene() {
+    const loader = document.getElementById('loader');
+    if (!loader || loader.classList.contains('hidden')) {
+        return;
+    }
+    
+    setTimeout(() => {
+        loader.classList.add('hidden');
+        renderer.shadowMap.needsUpdate = true;
+    }, 200);
+}
+
+function scheduleDeferredModelLoads() {
+    if (deferredLoadsScheduled) {
+        return;
+    }
+    
+    deferredLoadsScheduled = true;
+    const loadDeferredModels = () => {
+        loadOtherModels();
+        loadSkullModel('models/skull_closed.glb', 'closed');
+        loadSkullModel('models/skull_half_wide.glb', 'half');
+        loadSkullModel('models/skull_wide.glb', 'wide');
+    };
+    
+    if ('requestIdleCallback' in window) {
+        window.requestIdleCallback(loadDeferredModels, { timeout: 1500 });
+        return;
+    }
+    
+    setTimeout(loadDeferredModels, 400);
+}
+
+function loadModels() {
+    setTimeout(() => {
+        revealScene();
+    }, 800);
+
+    const criticalLoads = [
+        loadOuroboros().finally(() => {
+            updateCriticalProgress();
+        })
+    ];
+    
+    Promise.allSettled(criticalLoads).finally(() => {
+        revealScene();
+        scheduleDeferredModelLoads();
+    });
+}
+
+function loadOuroboros() {
+    return loadOnce('ouroboros', async () => {
+        const gltf = await loadGLTF('models/oroborus.glb');
         ouroboros = gltf.scene;
         setupModel(ouroboros, SCALES.OUROBOROS);
         scene.add(ouroboros);
-        updateProgress();
         updateNavButtonPositions();
-    }, undefined, (error) => {
+        return ouroboros;
+    }).catch((error) => {
         console.error('Error loading Ouroboros:', error);
-        updateProgress();
+        return null;
     });
-    
-    // Load skull models
-    loadSkullModel('models/skull_closed.glb', 'closed');
-    loadSkullModel('models/skull_half_wide.glb', 'half');
-    loadSkullModel('models/skull_wide.glb', 'wide');
-    
-    // Load other models
-    loadOtherModels();
 }
 
 function setupModel(model, scale) {
@@ -286,19 +357,31 @@ function setupModel(model, scale) {
         if (child.isMesh) {
             child.castShadow = true;
             child.receiveShadow = true;
-            if (child.material) {
-                originalMaterials.set(child, child.material.clone());
-                child.material.metalness = Math.min(child.material.metalness, 0.5);
-                child.material.roughness = Math.max(child.material.roughness, 0.5);
-            }
+            const materials = Array.isArray(child.material) ? child.material : [child.material];
+            materials.filter(Boolean).forEach((material) => {
+                if (!originalMaterials.has(material)) {
+                    originalMaterials.set(material, {
+                        color: material.color ? material.color.clone() : null,
+                        emissive: material.emissive ? material.emissive.clone() : null,
+                        emissiveIntensity: material.emissiveIntensity ?? 0
+                    });
+                }
+                
+                if ('metalness' in material) {
+                    material.metalness = Math.min(material.metalness, 0.5);
+                }
+                
+                if ('roughness' in material) {
+                    material.roughness = Math.max(material.roughness, 0.5);
+                }
+            });
         }
     });
 }
 
 function loadSkullModel(path, type) {
-    const loader = new GLTFLoader();
-    
-    loader.load(path, (gltf) => {
+    return loadOnce(`skull:${type}`, async () => {
+        const gltf = await loadGLTF(path);
         const skull = gltf.scene;
         setupModel(skull, SCALES.SKULL);
         skull.rotation.y = Math.PI / 2;
@@ -318,44 +401,52 @@ function loadSkullModel(path, type) {
             scene.add(skullWide);
         }
         
-        updateProgress();
-    }, undefined, (error) => {
+        return skull;
+    }).catch((error) => {
         console.error(`Error loading ${type} skull:`, error);
-        updateProgress();
+        return null;
     });
 }
 
 function loadOtherModels() {
-    const loader = new GLTFLoader();
-    
-    // Load DNA
-    loader.load('models/dna.glb', (gltf) => {
+    loadDNA();
+    loadHourglass();
+    loadGalaxy();
+}
+
+function loadDNA() {
+    return loadOnce('dna', async () => {
+        const gltf = await loadGLTF('models/dna.glb');
         dna = gltf.scene;
         setupModel(dna, SCALES.DNA);
         dna.position.set(POSITIONS.DNA.x, POSITIONS.DNA.y, POSITIONS.DNA.z);
         dna.rotation.set(ROTATIONS.DNA.x, ROTATIONS.DNA.y, ROTATIONS.DNA.z);
         scene.add(dna);
-        updateProgress();
-    }, undefined, (error) => {
+        return dna;
+    }).catch((error) => {
         console.error('Error loading DNA:', error);
-        updateProgress();
+        return null;
     });
-    
-    // Load Hourglass
-    loader.load('models/sand_clock.glb', (gltf) => {
+}
+
+function loadHourglass() {
+    return loadOnce('hourglass', async () => {
+        const gltf = await loadGLTF('models/sand_clock.glb');
         hourglass = gltf.scene;
         setupModel(hourglass, SCALES.HOURGLASS);
         hourglass.position.set(POSITIONS.HOURGLASS.x, POSITIONS.HOURGLASS.y, POSITIONS.HOURGLASS.z);
         hourglass.rotation.set(ROTATIONS.HOURGLASS.x, ROTATIONS.HOURGLASS.y, ROTATIONS.HOURGLASS.z);
         scene.add(hourglass);
-        updateProgress();
-    }, undefined, (error) => {
+        return hourglass;
+    }).catch((error) => {
         console.error('Error loading Hourglass:', error);
-        updateProgress();
+        return null;
     });
-    
-    // Load Galaxy
-    loader.load('models/need_some_space.glb', (gltf) => {
+}
+
+function loadGalaxy() {
+    return loadOnce('galaxy', async () => {
+        const gltf = await loadGLTF('models/need_some_space.glb');
         galaxyContainer = new THREE.Group();
         galaxy = gltf.scene;
         setupModel(galaxy, SCALES.GALAXY);
@@ -363,31 +454,20 @@ function loadOtherModels() {
         galaxyContainer.position.set(POSITIONS.GALAXY.x, POSITIONS.GALAXY.y, POSITIONS.GALAXY.z);
         galaxyContainer.scale.setScalar(0.01);
         scene.add(galaxyContainer);
-        updateProgress();
-    }, undefined, (error) => {
+        return galaxyContainer;
+    }).catch((error) => {
         console.error('Error loading Galaxy:', error);
-        updateProgress();
+        return null;
     });
 }
 
-function updateProgress() {
-    loadedCount++;
-    const progress = Math.min((loadedCount / totalModels) * 100, 100);
-    
-    if (window.updateLoaderProgress) {
-        window.updateLoaderProgress(progress);
-    }
-    
-    if (loadedCount >= totalModels) {
-        setTimeout(() => {
-            // Hide loader without animation
-            const loader = document.getElementById('loader');
-            if (loader) {
-                loader.classList.add('hidden');
-            }
-            renderer.shadowMap.needsUpdate = true;
-        }, 500);
-    }
+function ensureProjectAssets() {
+    return Promise.allSettled([
+        loadGalaxy(),
+        loadSkullModel('models/skull_closed.glb', 'closed'),
+        loadSkullModel('models/skull_half_wide.glb', 'half'),
+        loadSkullModel('models/skull_wide.glb', 'wide')
+    ]);
 }
 
 function updateNavButtonPositions() {
@@ -429,12 +509,18 @@ function setupUI() {
             renderer.shadowMap.needsUpdate = true;
             
             if (section === 'contact') {
+                loadHourglass();
                 animateCameraToHourglass();
             } else if (section === 'about') {
+                loadDNA();
                 animateCameraToDNA();
             } else if (section === 'projects') {
                 isGalaxyWindowOpen = true;
-                animateSkullJawAndCameraToGalaxy();
+                ensureProjectAssets().then(() => {
+                    if (currentSection === 'projects' && isGalaxyWindowOpen) {
+                        animateSkullJawAndCameraToGalaxy();
+                    }
+                });
             }
         });
     });
@@ -594,21 +680,25 @@ function updateMaterialBrightness() {
         
         object.traverse((child) => {
             if (child.isMesh && child.material) {
-                const original = originalMaterials.get(child);
-                if (original) {
-                    if (child.material.color && original.color) {
-                        child.material.color = original.color.clone();
-                        child.material.color.multiplyScalar(BRIGHTNESS[brightnessKey] * BRIGHTNESS.GLOBAL);
+                const materials = Array.isArray(child.material) ? child.material : [child.material];
+                materials.filter(Boolean).forEach((material) => {
+                    const original = originalMaterials.get(material);
+                    if (!original) {
+                        return;
                     }
                     
-                    if (child.material.emissive && original.emissive) {
-                        child.material.emissive = original.emissive.clone();
-                        const emissiveIntensity = original.emissiveIntensity || 0.1;
-                        child.material.emissiveIntensity = emissiveIntensity * BRIGHTNESS[brightnessKey] * BRIGHTNESS.GLOBAL;
+                    if (material.color && original.color) {
+                        material.color.copy(original.color);
+                        material.color.multiplyScalar(BRIGHTNESS[brightnessKey] * BRIGHTNESS.GLOBAL);
                     }
                     
-                    child.material.needsUpdate = true;
-                }
+                    if (material.emissive && original.emissive) {
+                        material.emissive.copy(original.emissive);
+                        material.emissiveIntensity = original.emissiveIntensity * BRIGHTNESS[brightnessKey] * BRIGHTNESS.GLOBAL;
+                    }
+                    
+                    material.needsUpdate = true;
+                });
             }
         });
     };

@@ -46,8 +46,8 @@ function createLoaderAnimation() {
 
 // Update progress
 window.updateLoaderProgress = function(progress) {
-    const progressFill = document.querySelector('.progress-fill');
-    const progressText = document.querySelector('.progress-text');
+    const progressFill = document.querySelector('#loader .progress-fill');
+    const progressText = document.querySelector('#loader .progress-text');
     
     if (progressFill) {
         progressFill.style.width = `${progress}%`;
