@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>cyn</title>
+    
+    <!-- Favicon -->
+    <link rel="apple-touch-icon" sizes="180x180" href="favicon/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon/favicon-16x16.png">
+    <link rel="manifest" href="favicon/site.webmanifest">
+    <link rel="shortcut icon" href="favicon/favicon.ico">
+    
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Preload critical assets -->
+    <link rel="preload" href="models/oroborus.glb" as="fetch" crossorigin>
+    <link rel="preload" href="you_must_die_album_cover.jpg" as="image">
+    
+    <!-- Import maps -->
+    <script async src="https://unpkg.com/es-module-shims@1.10.0/dist/es-module-shims.js"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/",
+            "gsap": "https://unpkg.com/gsap@3.12.5/index.js"
+        }
+    }
+    </script>
+</head>
+<body>
+    <!-- 3D Canvas -->
+    <canvas id="canvas"></canvas>
+    
+    <!-- Brightness Controls -->
+    <div class="brightness-controls resizable" id="brightnessControls">
+        <div class="controls-header">
+            <span data-lang="controls">Işık Kontrolleri</span>
+            <div class="window-controls">
+                <button class="window-minimize" id="brightnessMinimize">−</button>
+                <button class="toggle-controls" id="toggleControls">×</button>
+            </div>
+        </div>
+        <div class="controls-content" id="controlsContent">
+            <div class="brightness-item">
+                <label data-lang="ouroboros">Uzaylı Ouroboros</label>
+                <input type="range" class="brightness-slider" id="brightnessOuroboros" min="0" max="200" value="100">
+                <span class="brightness-value">100%</span>
+            </div>
+            <div class="brightness-item">
+                <label data-lang="skull">Kurukafa</label>
+                <input type="range" class="brightness-slider" id="brightnessSkull" min="0" max="200" value="100">
+                <span class="brightness-value">100%</span>
+            </div>
+            <div class="brightness-item">
+                <label>DNA</label>
+                <input type="range" class="brightness-slider" id="brightnessDNA" min="0" max="200" value="100">
+                <span class="brightness-value">100%</span>
+            </div>
+            <div class="brightness-item">
+                <label data-lang="hourglass">Kum Saati</label>
+                <input type="range" class="brightness-slider" id="brightnessHourglass" min="0" max="200" value="100">
+                <span class="brightness-value">100%</span>
+            </div>
+            <div class="brightness-item">
+                <label data-lang="galaxy">Galaksi</label>
+                <input type="range" class="brightness-slider" id="brightnessGalaxy" min="0" max="200" value="100">
+                <span class="brightness-value">100%</span>
+            </div>
+            <div class="brightness-item">
+                <label data-lang="global">Genel Işık</label>
+                <input type="range" class="brightness-slider" id="brightnessGlobal" min="0" max="200" value="100">
+                <span class="brightness-value">100%</span>
+            </div>
+        </div>
+        <div class="resize-handle-n"></div>
+        <div class="resize-handle-s"></div>
+        <div class="resize-handle-e"></div>
+        <div class="resize-handle-w"></div>
+        <div class="resize-handle-ne"></div>
+        <div class="resize-handle-nw"></div>
+        <div class="resize-handle-se"></div>
+        <div class="resize-handle-sw"></div>
+    </div>
+    
+    <!-- Ouroboros Navigation -->
+    <nav class="ouroboros-nav" id="ouroborosNav">
+        <button class="nav-button" data-section="contact" data-angle="0">
+            <span class="nav-icon">⌛</span>
+            <span class="nav-label" data-lang="contact">morieris.</span>
+        </button>
+        <button class="nav-button" data-section="about" data-angle="120">
+            <span class="nav-icon">∞</span>
+            <span class="nav-label" data-lang="about">vives.</span>
+        </button>
+        <button class="nav-button" data-section="projects" data-angle="240">
+            <span class="nav-icon">☽</span>
+            <span class="nav-label" data-lang="projects">memento</span>
+        </button>
+    </nav>
+    
+    <!-- Draggable & Resizable Info Window -->
+    <div class="info-window resizable" id="infoWindow">
+        <div class="window-header" id="windowHeader">
+            <span class="window-title" id="windowTitle">Başlık</span>
+            <div class="window-controls">
+                <button class="window-minimize" id="infoMinimize">−</button>
+                <button class="window-close" id="windowClose">×</button>
+            </div>
+        </div>
+        <div class="window-content" id="windowContent">
+            <!-- Dynamic content -->
+        </div>
+        <div class="resize-handle-n"></div>
+        <div class="resize-handle-s"></div>
+        <div class="resize-handle-e"></div>
+        <div class="resize-handle-w"></div>
+        <div class="resize-handle-ne"></div>
+        <div class="resize-handle-nw"></div>
+        <div class="resize-handle-se"></div>
+        <div class="resize-handle-sw"></div>
+    </div>
+    
+    <!-- Lyrics Window -->
+    <div class="lyrics-window resizable" id="lyricsWindow">
+        <div class="window-header" id="lyricsHeader">
+            <span class="window-title" data-lang="lyricsTitle">You Must Die - Şarkı Sözleri</span>
+            <div class="window-controls">
+                <button class="window-minimize" id="lyricsMinimize">−</button>
+                <button class="window-close" id="lyricsClose">×</button>
+            </div>
+        </div>
+        <div class="lyrics-content" id="lyricsContent">
+            <div class="lyrics-text">
+                <p>Kırılgan kemikler cildinize zar zor tutunuyor<br>
+                <span class="lyrics-english">Brittle bones barely holding onto your skin</span></p>
+                
+                <p>Günah için çok karmaşık bir şekilde geliştirilmiş bir vücut<br>
+                <span class="lyrics-english">A body so intricately developed for sin</span></p>
+                
+                <p>Tüm saniyeler yara ama sonuncusu öldürüyor<br>
+                <span class="lyrics-english">All seconds wound but the last one kills</span></p>
+                
+                <p>Zaman her şeyi yutar<br>
+                <span class="lyrics-english">Time devours everything</span></p>
+                
+                <p class="lyrics-chorus lyrics-center">Yalnız öleceksin<br>
+                <span class="lyrics-english">You will die alone</span></p>
+                
+                <p class="lyrics-chorus lyrics-center">Yalnız öleceksin<br>
+                <span class="lyrics-english">You will die alone</span></p>
+                
+                <p>Tanıdıkların etrafında<br>
+                <span class="lyrics-english">Around the ones you know</span></p>
+                
+                <p class="lyrics-highlight lyrics-center">Unutma, ölmelisin<br>
+                <span class="lyrics-english">Remember, you must die</span></p>
+                
+                <p>Ölümünün yazarı ben miyim?<br>
+                <span class="lyrics-english">Am I the author of your demise?</span></p>
+                
+                <p>Biliyorsun berbat ettin<br>
+                <span class="lyrics-english">You know you fucked up</span></p>
+                
+                <p>Bağlarını keseceğim<br>
+                <span class="lyrics-english">I'll cut your ties</span></p>
+                
+                <p class="lyrics-chorus lyrics-center">Yalnız öleceksin<br>
+                <span class="lyrics-english">You will die alone</span></p>
+                
+                <p class="lyrics-chorus lyrics-center">Yalnız öleceksin<br>
+                <span class="lyrics-english">You will die alone</span></p>
+                
+                <p>Tanıdıkların etrafında<br>
+                <span class="lyrics-english">Around the ones you know</span></p>
+                
+                <p class="lyrics-highlight lyrics-center">Unutma, ölmelisin<br>
+                <span class="lyrics-english">Remember, you must die</span></p>
+                
+                <p>Tüm saniyeler yara ama sonuncusu öldürüyor<br>
+                <span class="lyrics-english">All seconds wound but the last one kills</span></p>
+                
+                <p class="lyrics-scream">Hayatını sikeyim<br>
+                <span class="lyrics-english">Fuck your life</span></p>
+                
+                <p class="lyrics-scream">Ölüm arzusu<br>
+                <span class="lyrics-english">Death wish</span></p>
+                
+                <p class="lyrics-scream">Ölüm arzusu<br>
+                <span class="lyrics-english">Death wish</span></p>
+                
+                <p class="lyrics-center">Öleceksin (öleceksin)<br>
+                <span class="lyrics-english">You will die (die)</span></p>
+                
+                <p class="lyrics-center">Ölmek zorundasın (öl)<br>
+                <span class="lyrics-english">You must die (die)</span></p>
+                
+                <p>Hayatını alacağım (hayatını)<br>
+                <span class="lyrics-english">I'll take your life (life)</span></p>
+                
+                <p>Ve onu benim yap<br>
+                <span class="lyrics-english">And make it mine</span></p>
+            </div>
+        </div>
+        <div class="resize-handle-n"></div>
+        <div class="resize-handle-s"></div>
+        <div class="resize-handle-e"></div>
+        <div class="resize-handle-w"></div>
+        <div class="resize-handle-ne"></div>
+        <div class="resize-handle-nw"></div>
+        <div class="resize-handle-se"></div>
+        <div class="resize-handle-sw"></div>
+    </div>
+    
+    <!-- Mouse Guide Window -->
+    <div class="mouse-guide resizable" id="mouseGuide">
+        <div class="guide-header">
+            <span data-lang="mouseGuide">Mouse Kullanımı</span>
+            <button class="guide-minimize" id="guideMinimize">−</button>
+        </div>
+        <div class="guide-content" id="guideContent">
+            <p><strong data-lang="leftClick">Sol Tık:</strong> <span data-lang="leftClickDesc">Buton/Etkileşim</span></p>
+            <p><strong data-lang="rightClick">Sağ Tık:</strong> <span data-lang="rightClickDesc">Döndürme</span></p>
+            <p><strong data-lang="scroll">Scroll:</strong> <span data-lang="scrollDesc">Yakınlaştır/Uzaklaştır</span></p>
+        </div>
+    </div>
+    
+    <!-- Advanced Music Player with Album Art -->
+    <div class="music-player resizable" id="musicPlayer">
+        <div class="player-header" id="playerHeader">
+            <div class="player-info">
+                <span class="now-playing" data-lang="nowPlaying">ŞİMDİ ÇALIYOR</span>
+                <span class="player-title">SUICIDE SILENCE - You Must Die</span>
+            </div>
+            <button class="player-minimize" id="playerMinimize">−</button>
+        </div>
+        <div class="player-content" id="playerContent">
+            <div class="player-main">
+                <div class="album-art-container">
+                    <img src="you_must_die_album_cover.jpg" alt="Album Cover" class="album-art" id="albumArt" loading="lazy">
+                    <div class="album-art-overlay"></div>
+                </div>
+                <div class="player-details">
+                    <div class="waveform-container">
+                        <canvas id="waveform" width="350" height="60"></canvas>
+                    </div>
+                    <audio id="audioPlayer" preload="metadata">
+                        <source src="SUICIDE SILENCE - You Must Die.mp3" type="audio/mpeg">
+                    </audio>
+                    <div class="player-controls">
+                        <div class="control-buttons">
+                            <button class="player-btn" id="playBtn">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M8 5v14l11-7z"/>
+                                </svg>
+                            </button>
+                            <button class="player-btn" id="pauseBtn" style="display:none;">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M6 4h4v16H6zm8 0h4v16h-4z"/>
+                                </svg>
+                            </button>
+                            <button class="player-btn small" id="restartBtn">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
+                                </svg>
+                            </button>
+                            <button class="player-btn small lyrics-btn" id="lyricsBtn" data-lang="lyrics">Şarkı Sözleri</button>
+                        </div>
+                        <div class="progress-container">
+                            <span class="time-current">0:00</span>
+                            <div class="progress-bar" id="progressBar">
+                                <div class="progress-fill" id="progressFill"></div>
+                                <div class="progress-handle"></div>
+                            </div>
+                            <span class="time-total">0:00</span>
+                        </div>
+                    </div>
+                    <div class="volume-container">
+                        <button class="volume-btn" id="volumeBtn">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                            </svg>
+                        </button>
+                        <div class="volume-slider-container">
+                            <input type="range" class="volume-slider" id="volumeSlider" min="0" max="100" value="50">
+                        </div>
+                        <span class="volume-value">50%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="resize-handle-n"></div>
+        <div class="resize-handle-s"></div>
+        <div class="resize-handle-e"></div>
+        <div class="resize-handle-w"></div>
+        <div class="resize-handle-ne"></div>
+        <div class="resize-handle-nw"></div>
+        <div class="resize-handle-se"></div>
+        <div class="resize-handle-sw"></div>
+    </div>
+    
+    <!-- Copyright and Instagram -->
+    <div class="footer-info">
+        <span class="copyright">© cyn</span>
+        <a href="https://www.instagram.com/cyn.kuzu?igsh=MW5xbWlnY2FqMHowcw==" target="_blank" class="instagram-link">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+            </svg>
+        </a>
+    </div>
+    
+    <!-- Language Switcher -->
+    <div class="language-switcher">
+        <button class="lang-btn active" data-lang="tr">TR</button>
+        <button class="lang-btn" data-lang="en">EN</button>
+    </div>
+    
+    <!-- Mouse Trail -->
+    <div class="cursor-trail"></div>
+    <div class="cursor-dot"></div>
+    
+    <!-- Loading Screen -->
+    <div id="loader" class="loader">
+        <canvas id="loaderCanvas"></canvas>
+        <div class="loader-content">
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar">
+                    <div class="progress-fill"></div>
+                </div>
+                <div class="progress-text">0%</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Album Zoom Modal -->
+    <div class="album-zoom-modal" id="albumZoomModal">
+        <div class="album-zoom-container">
+            <img src="you_must_die_album_cover.jpg" alt="Album Cover" class="album-zoom-img" id="albumZoomImg">
+            <button class="album-zoom-close" id="albumZoomClose">×</button>
+        </div>
+    </div>
+    
+    <!-- Scripts -->
+    <script type="module" src="loader.js"></script>
+    <script type="module" src="main.js"></script>
+    <script src="cursor.js" defer></script>
+    <script src="music-player.js" defer></script>
+    <script src="window-manager.js" defer></script>
+</body>
+</html>
