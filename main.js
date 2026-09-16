@@ -147,7 +147,7 @@ let ouroboros, dna, hourglass, galaxy;
 let galaxyContainer;
 let skullClosed, skullHalf, skullWide;
 let currentSkull = null;
-const CRITICAL_MODEL_COUNT = 1;
+const CRITICAL_MODEL_COUNT = 2;
 let criticalModelsLoaded = 0;
 let currentSection = null;
 let isZoomedIn = false;
@@ -299,7 +299,6 @@ function scheduleDeferredModelLoads() {
     deferredLoadsScheduled = true;
     const loadDeferredModels = () => {
         loadOtherModels();
-        loadSkullModel('models/skull_closed.glb', 'closed');
         loadSkullModel('models/skull_half_wide.glb', 'half');
         loadSkullModel('models/skull_wide.glb', 'wide');
     };
@@ -319,6 +318,9 @@ function loadModels() {
 
     const criticalLoads = [
         loadOuroboros().finally(() => {
+            updateCriticalProgress();
+        }),
+        loadSkullModel('models/skull_closed.glb', 'closed').finally(() => {
             updateCriticalProgress();
         })
     ];
